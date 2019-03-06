@@ -1,0 +1,90 @@
+---
+- name: CREATE AND RUN DEPLOY
+  hosts: local_instance
+  connection: local
+  become: false
+  vars:
+    deployment_id: "ElasticSearch_Deployment"
+    blueprint_id: "Elasticstack_AIO_BluePrint"
+    cloudify_url: "https://MANAGER_FQDN/api/v3.1/"
+    tenant_id: "CLOUDIFY_TENANT_NAME"
+    cloudify_user: "XX"
+    cloudify_password: "XX"
+
+  tasks:
+  - name: Query blueprint
+    uri:
+      url: "{{cloudify_url}}blueprints?id={{blueprint_id}}&_include=id"
+      method: GET
+      user: "{{cloudify_user}}"
+      password: "{{cloudify_password}}"
+      headers:
+        Tenant: "{{tenant_id}}"
+      force_basic_auth: yes
+    register: query_result
+
+  - name: Query blueprint results
+    debug:
+      msg: "{{ query_result }}"
+
+  - name: Create deployment
+    uri:
+      url: "{{cloudify_url}}deployments/{{deployment_id}}?_include=id"
+      method: PUT
+      user: "{{cloudify_user}}"
+      password: "{{cloudify_password}}"
+      headers:
+        Tenant: "{{tenant_id}}"
+        Content-Type: application/json
+      body: {"blueprint_id": "{{blueprint_id}}"}
+      force_basic_auth: yes
+      status_code: 201
+      body_format: json
+    register: bc_result
+
+  - name: Create deployment (DISP)
+    debug:
+      msg: "{{ bc_result }}"
+
+  - name: Deployment environment creation is in progress...
+    pause:
+      seconds: 5
+
+  - name: Start deployment execution
+    uri:
+      url: "{{cloudify_url}}executions?_include=id"
+      method: POST
+      user: "{{cloudify_user}}"
+      password: "{{cloudify_password}}"
+      headers:
+        Tenant: "{{tenant_id}}"
+        Content-Type: application/json
+      body: '{"deployment_id": "{{deployment_id}}", "workflow_id": "install"}'
+      force_basic_auth: yes
+      status_code: 201
+      body_format: json
+    register: dc_result
+
+  - name: Run deployment (DISP)
+    debug:
+      msg: "{{ dc_result }}"
+
+  - name: Firing is in progress...
+    pause:
+      seconds: 15
+
+  - name: Query final Events
+    uri:
+      url: "{{cloudify_url}}events?execution_id={{dc_result.json.id}}"
+      method: GET
+      user: "{{cloudify_user}}"
+      password: "{{cloudify_password}}"
+      headers:
+        Tenant: "{{tenant_id}}"
+      force_basic_auth: yes
+    register: query_result
+
+  - name: Query blueprint results
+    debug:
+      msg: "{{ item.message}}"
+    loop: "{{ query_result.json }}"
